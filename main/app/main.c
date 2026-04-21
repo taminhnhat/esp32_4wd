@@ -14,6 +14,7 @@
 #include "config.h"
 #include "motor_control.h"
 #include "battery.h"
+#include "rp3_receiver.h"
 
 static const char *TAG = "example";
 static led_strip_handle_t s_health_led;
