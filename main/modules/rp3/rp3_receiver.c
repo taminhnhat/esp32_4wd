@@ -6,9 +6,9 @@
 #include "spinlock.h"
 #include "driver/uart.h"
 
-#define RP3_UART_PORT               UART_NUM_1
-#define RP3_UART_TX_GPIO            43
-#define RP3_UART_RX_GPIO            44
+#define RP3_UART_PORT               UART_NUM_2
+#define RP3_UART_TX_GPIO            1
+#define RP3_UART_RX_GPIO            2
 #define RP3_UART_BAUD_RATE          420000
 #define RP3_UART_RX_BUFFER_SIZE     256
 #define RP3_JOB_STACK_SIZE          4096

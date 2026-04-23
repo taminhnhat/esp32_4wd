@@ -2,9 +2,11 @@ idf_component_register(SRCS "app/main.c"
                             "modules/battery/battery.c"
                             "modules/motor/motor_control.c"
                             "modules/rp3/rp3_receiver.c"
-                       PRIV_REQUIRES "esp_driver_rmt" "esp_driver_pcnt" "esp_timer" "esp_driver_i2c" "esp_driver_uart"
+                            "modules/usb/usb_bridge.c"
+                       PRIV_REQUIRES "esp_driver_rmt" "esp_driver_pcnt" "esp_timer" "esp_driver_i2c" "esp_driver_uart" "tinyusb"
                        INCLUDE_DIRS "."
                                     "config"
                                     "modules/battery"
                                     "modules/motor"
-                                    "modules/rp3")
+                                    "modules/rp3"
+                                    "modules/usb")

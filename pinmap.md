@@ -1,10 +1,10 @@
 | FUNC         | PIN | ------ | PIN | FUNC         |
 |--------------|-----|--------|-----|--------------|
 |              | 3V3 |        | GND |              |
-|              | 3V3 |        | 44  | TX RP3       |
-|              | RST |        | 43  | RX RP3       |
-| MOTOR-1A     | 4   |        | 1   | ADC          |
-| MOTOR-1B     | 5   |        | 2   | ADC          |
+|              | 3V3 |        | 44  | TX           |
+|              | RST |        | 43  | RX           |
+| MOTOR-1A     | 4   |        | 1   | TX RP3       |
+| MOTOR-1B     | 5   |        | 2   | RX RP3       |
 | MOTOR-2A     | 6   |        | 42  | ENC-1A       |
 | MOTOR-2B     | 7   |        | 41  | ENC-1B       |
 | MOTOR-3A     | 15  |        | 40  | ENC-2A       |

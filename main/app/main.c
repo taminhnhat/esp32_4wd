@@ -14,17 +14,22 @@
 #include "config.h"
 #include "motor_control.h"
 #include "battery.h"
+
 #include "rp3_receiver.h"
+#include "usb_bridge.h"
 
 static const char *TAG = "example";
 static led_strip_handle_t s_health_led;
 
 static void health_led_set(bool on)
 {
-    if (on) {
+    if (on)
+    {
         ESP_ERROR_CHECK(led_strip_set_pixel(s_health_led, 0, 0, 16, 0));
         ESP_ERROR_CHECK(led_strip_refresh(s_health_led));
-    } else {
+    }
+    else
+    {
         ESP_ERROR_CHECK(led_strip_clear(s_health_led));
     }
 }
@@ -86,6 +91,15 @@ void app_main(void)
     uint32_t health_led_counter = 0;
     health_led_set(led_on);
 
+    // --- RP3 Receiver initialization ---
+    static rp3_receiver_t rp3_receiver;
+    rp3_receiver_init(&rp3_receiver);
+    rp3_receiver_start_job(&rp3_receiver);
+
+    // Initialize USB bridge
+    usb_bridge_init();
+    xTaskCreate(usb_bridge_task, "usb_bridge", 4096, NULL, 5, NULL);
+
     while (1)
     {
         vTaskDelay(pdMS_TO_TICKS(100));
@@ -119,16 +133,35 @@ void app_main(void)
                battery_data.power);
 #endif
 
+        // --- RP3 Receiver logging every 100ms: print 10 RC channel values mapped to -100..100 ---
+        rp3_receiver_snapshot_t rp3_snapshot;
+        rp3_receiver_get_snapshot(&rp3_receiver, &rp3_snapshot);
+        if (rp3_snapshot.link_stats_valid && rp3_snapshot.rc_channels_valid)
+        {
+            char line[160];
+            int pos = 0;
+
+            for (int i = 0; i < 10; ++i)
+            {
+                // printf("%-8u", rp3_snapshot.rc_channels[i]);
+                pos += snprintf(line + pos, sizeof(line) - pos,
+                                "%-8u", rp3_snapshot.rc_channels[i]);
+            }
+            // printf("\n");
+            pos += snprintf(line + pos, sizeof(line) - pos, "\r\n");
+            usb_bridge_write(line, pos);
+        }
+
         // Print battery status every 5 seconds
         static uint32_t battery_print_counter = 0;
         if (++battery_print_counter % 10 == 0)
         {
-            ESP_LOGI(TAG, "Velocity [pulses/%dms] m1=%d m2=%d m3=%d m4=%d",
-                     BDC_PID_LOOP_PERIOD_MS,
-                     motor_system.motors[0].report_pulses,
-                     motor_system.motors[1].report_pulses,
-                     motor_system.motors[2].report_pulses,
-                     motor_system.motors[3].report_pulses);
+            // ESP_LOGI(TAG, "Velocity [pulses/%dms] m1=%d m2=%d m3=%d m4=%d",
+            //          BDC_PID_LOOP_PERIOD_MS,
+            //          motor_system.motors[0].report_pulses,
+            //          motor_system.motors[1].report_pulses,
+            //          motor_system.motors[2].report_pulses,
+            //          motor_system.motors[3].report_pulses);
             // battery_print_status();
         }
     }
