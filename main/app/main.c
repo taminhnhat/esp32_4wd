@@ -10,44 +10,14 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "esp_timer.h"
-#include "led_strip.h"
 #include "config.h"
 #include "motor_control.h"
 #include "battery.h"
-
+#include "board_led.h"
 #include "rp3_receiver.h"
 #include "usb_bridge.h"
 
 static const char *TAG = "example";
-static led_strip_handle_t s_health_led;
-
-static void health_led_set(bool on)
-{
-    if (on)
-    {
-        ESP_ERROR_CHECK(led_strip_set_pixel(s_health_led, 0, 0, 16, 0));
-        ESP_ERROR_CHECK(led_strip_refresh(s_health_led));
-    }
-    else
-    {
-        ESP_ERROR_CHECK(led_strip_clear(s_health_led));
-    }
-}
-
-static void health_led_init(void)
-{
-    led_strip_config_t strip_config = {
-        .strip_gpio_num = BUILTIN_LED_GPIO,
-        .max_leds = 1,
-    };
-    led_strip_rmt_config_t rmt_config = {
-        .resolution_hz = 10 * 1000 * 1000,
-        .flags.with_dma = false,
-    };
-
-    ESP_ERROR_CHECK(led_strip_new_rmt_device(&strip_config, &rmt_config, &s_health_led));
-    ESP_ERROR_CHECK(led_strip_clear(s_health_led));
-}
 
 // Enable this config,  we will print debug formated string, which in return can be captured and parsed by Serial-Studio
 #define SERIAL_STUDIO_DEBUG CONFIG_SERIAL_STUDIO_DEBUG
@@ -85,11 +55,10 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_timer_start_periodic(pid_loop_timer, BDC_PID_LOOP_PERIOD_MS * 1000));
 
     ESP_LOGI(TAG, "Initializing health RGB LED on GPIO%d", BUILTIN_LED_GPIO);
-    health_led_init();
 
-    bool led_on = true;
-    uint32_t health_led_counter = 0;
-    health_led_set(led_on);
+    led_init();
+    led_set(0, 16, 0);
+    extend_led_set(3, 0, 0, 8);
 
     // --- RP3 Receiver initialization ---
     static rp3_receiver_t rp3_receiver;
@@ -103,24 +72,10 @@ void app_main(void)
     while (1)
     {
         vTaskDelay(pdMS_TO_TICKS(100));
-        // the following logging format is according to the requirement of serial-studio frame format
-        // also see the dashboard config file `serial-studio-dashboard.json` for more information
 
         // Get current battery data
         battery_data_t battery_data = {0};
         battery_read_data(&battery_data);
-
-        if (++health_led_counter >= 50)
-        {
-            health_led_counter = 0;
-        }
-
-        bool next_led_on = health_led_counter <= 5;
-        if (next_led_on != led_on)
-        {
-            led_on = next_led_on;
-            health_led_set(led_on);
-        }
 
 #if SERIAL_STUDIO_DEBUG
         printf("/*motor1:%d,motor2:%d,motor3:%d,motor4:%d,voltage:%.2f,current:%.3f,power:%.2f*/\r\n",

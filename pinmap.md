@@ -12,11 +12,11 @@
 | MOTOR-4A     | 17  |        | 38  | ENC-3A       |
 | MOTOR-4B     | 18  |        | 37  | ENC-3B       |
 | SDA          | 8   |        | 36  | ENC-4A       |
-|              | 3   |        | 35  | ENC-4B       |
-|              | 46  |        | 0   |              |
-| SCL          | 9   |        | 45  | BNO085 CS    |
-|              | 10  |        | 48  | BNO085 RST   |
-|              | 11  |        | 47  | BNO085 INT   |
+| BNO085 INT   | 3   |        | 35  | ENC-4B       |
+| BNO085 RST   | 46  |        | 0   |              |
+| SCL          | 9   |        | 45  |              |
+| BNO085 CS    | 10  |        | 48  | BUILTIN LED  |
+| CS           | 11  |        | 47  |              |
 | MOSI         | 12  |        | 21  |              |
 | MISO         | 13  |        | 20  | USB D+       |
 | CLK          | 14  |        | 19  | USB D-       |

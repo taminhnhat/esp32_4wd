@@ -73,8 +73,8 @@
 #define BNO085_MOSI SPI_MOSI
 #define BNO085_MISO SPI_MISO
 #define BNO085_CLK SPI_CLK
-#define BNO085_CS 45
-#define BNO085_RST 48
-#define BNO085_INT 47
+#define BNO085_CS 10
+#define BNO085_RST 46
+#define BNO085_INT 3
 
 #endif // CONFIG_H
