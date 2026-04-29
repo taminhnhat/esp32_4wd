@@ -15,6 +15,7 @@
 #include "battery.h"
 #include "board_led.h"
 #include "rp3_receiver.h"
+#include "uart_bridge.h"
 #include "usb_bridge.h"
 
 static const char *TAG = "example";
@@ -65,9 +66,15 @@ void app_main(void)
     rp3_receiver_init(&rp3_receiver);
     rp3_receiver_start_job(&rp3_receiver);
 
-    // Initialize USB bridge
+#if defined(CONFIG_ROS2_TRANSPORT_UART) && CONFIG_ROS2_TRANSPORT_UART
+    // Initialize ROS2 message bridge over UART
+    uart_bridge_init();
+    xTaskCreate(uart_bridge_task, "uart_bridge", 4096, NULL, 5, NULL);
+#else
+    // Initialize ROS2 message bridge over USB CDC
     usb_bridge_init();
     xTaskCreate(usb_bridge_task, "usb_bridge", 4096, NULL, 5, NULL);
+#endif
 
     while (1)
     {
@@ -104,7 +111,11 @@ void app_main(void)
             }
             // printf("\n");
             pos += snprintf(line + pos, sizeof(line) - pos, "\r\n");
+#if defined(CONFIG_ROS2_TRANSPORT_UART) && CONFIG_ROS2_TRANSPORT_UART
+            uart_bridge_write(line, pos);
+#else
             usb_bridge_write(line, pos);
+#endif
         }
 
         // Print battery status every 5 seconds

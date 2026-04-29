@@ -1,15 +1,16 @@
 #pragma once
 
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
-
-void usb_bridge_init(void);
-void usb_bridge_task(void *pvParameters);
-void usb_bridge_write(const char *data, size_t len);
+    void usb_bridge_init(void);
+    void usb_bridge_task(void *pvParameters);
+    void usb_bridge_write(const char *data, size_t len);
 
 #ifdef __cplusplus
 }
