@@ -17,6 +17,7 @@
 #include "rp3_receiver.h"
 #include "uart_bridge.h"
 #include "usb_bridge.h"
+#include "ros2_msgs.h"
 
 static const char *TAG = "example";
 
@@ -74,6 +75,7 @@ void app_main(void)
     // Initialize ROS2 message bridge over USB CDC
     usb_bridge_init();
     xTaskCreate(usb_bridge_task, "usb_bridge", 4096, NULL, 5, NULL);
+    xTaskCreate(ros2_telemetry_task, "ros2_telemetry", 4096, NULL, 5, NULL);
 #endif
 
     while (1)

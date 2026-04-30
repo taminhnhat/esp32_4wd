@@ -21,7 +21,7 @@
 #define BATTERY_I2C_TIMEOUT_MS         1000
 
 /* DFrobot Wattmeter I2C Address */
-#define BATTERY_WATTMETER_I2C_ADDR     0x10
+#define BATTERY_WATTMETER_I2C_ADDR     0x45
 
 /* Wattmeter Registers */
 #define BATTERY_REG_VOLTAGE            0x02  // Voltage register (2 bytes, LSB first)
