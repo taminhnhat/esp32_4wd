@@ -32,6 +32,61 @@ static const char *TAG = "ros2_msgs";
 #define ROS2_MSG_ERR_CFG 0x04
 #define ROS2_MSG_ERR_RANGE 0x05
 
+static TimerHandle_t telemetry_timer = NULL;
+
+static volatile bool telemetry_enabled = true;
+// static ros2_msgs_ctx_t ros2_msgs_ctx;
+static TaskHandle_t command_task = NULL;
+static TaskHandle_t telemetry_task = NULL;
+
+static size_t ros2_msgs_write(ros2_msgs_ctx_t *msgs, uint8_t *data, size_t len);
+static size_t ros2_msgs_read(ros2_msgs_ctx_t *msgs, uint8_t *data, size_t len);
+static void ros2_msgs_process(ros2_msgs_ctx_t *msgs, uint8_t *data, size_t len);
+
+static void telemetry_timer_cb(TimerHandle_t xTimer)
+{
+    if (telemetry_task != NULL)
+        xTaskNotifyGive(telemetry_task);
+}
+
+void ros2_command_task(void *pvParameters)
+{
+    (void)pvParameters;
+    ros2_msgs_ctx_t *msgs = (ros2_msgs_ctx_t *)pvParameters;
+    static uint8_t rx_buf[CONFIG_TINYUSB_CDC_RX_BUFSIZE];
+
+    ESP_LOGI(TAG, "ros2 command task start");
+
+    while (1)
+    {
+        size_t rx_size = ros2_msgs_read(msgs, rx_buf, sizeof(rx_buf));
+
+        // if (rx_size > 0)
+        // {
+        //     ros2_msgs_process(msgs, rx_buf, rx_size);
+        //     memset(rx_buf, 0, sizeof(rx_buf));
+        // }
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+}
+
+void ros2_telemetry_task(void *pvParameters)
+{
+    (void)pvParameters;
+    ros2_msgs_ctx_t *msgs = (ros2_msgs_ctx_t *)pvParameters;
+    msgs->tx_seq = 0;
+
+    ESP_LOGI(TAG, "ros2 telemetry task start");
+
+    while (1)
+    {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+        ros2_msgs_send_telemetry(msgs, msgs->tx_seq++);
+        // ESP_LOGI(TAG, "Sending telemetry %u", msgs->tx_seq);
+    }
+}
+
 static uint16_t ros2_msgs_crc16(const uint8_t *data, size_t len)
 {
     uint16_t crc = 0xFFFF;
@@ -105,15 +160,17 @@ static size_t ros2_msgs_stuff(const uint8_t *data, size_t len, uint8_t *stuffed,
     return out_len;
 }
 
-static void ros2_msgs_write(ros2_msgs_t *msgs, const uint8_t *data, size_t len)
+static size_t ros2_msgs_write(ros2_msgs_ctx_t *msgs, uint8_t *data, size_t len)
 {
-    if (msgs->write_fn != NULL)
-    {
-        msgs->write_fn(data, len, msgs->write_ctx);
-    }
+    return (msgs->write != NULL) ? msgs->write(msgs, data, len) : 0;
 }
 
-void ros2_msgs_send_frame(ros2_msgs_t *msgs, uint8_t msg_type, uint8_t seq, const uint8_t *payload, size_t payload_len)
+static size_t ros2_msgs_read(ros2_msgs_ctx_t *msgs, uint8_t *data, size_t len)
+{
+    return (msgs->read != NULL) ? msgs->read(msgs, data, len) : 0;
+}
+
+void ros2_msgs_send_frame(ros2_msgs_ctx_t *msgs, uint8_t msg_type, uint8_t seq, const uint8_t *payload, size_t payload_len)
 {
     uint8_t stuffed[512];
     const size_t stuffed_len = ros2_msgs_stuff(payload, payload_len, stuffed, sizeof(stuffed));
@@ -138,18 +195,18 @@ void ros2_msgs_send_frame(ros2_msgs_t *msgs, uint8_t msg_type, uint8_t seq, cons
     ros2_msgs_write(msgs, frame, 7 + stuffed_len);
 }
 
-static void ros2_msgs_send_ack(ros2_msgs_t *msgs, uint8_t seq)
+static void ros2_msgs_send_ack(ros2_msgs_ctx_t *msgs, uint8_t seq)
 {
     ros2_msgs_send_frame(msgs, ROS2_MSG_ACK, seq, &seq, 1);
 }
 
-static void ros2_msgs_send_nack(ros2_msgs_t *msgs, uint8_t seq, uint8_t err)
+static void ros2_msgs_send_nack(ros2_msgs_ctx_t *msgs, uint8_t seq, uint8_t err)
 {
     uint8_t payload[2] = {seq, err};
     ros2_msgs_send_frame(msgs, ROS2_MSG_NACK, seq, payload, sizeof(payload));
 }
 
-static void ros2_msgs_send_telemetry(ros2_msgs_t *msgs, uint8_t seq)
+void ros2_msgs_send_telemetry(ros2_msgs_ctx_t *msgs, uint8_t seq)
 {
     uint8_t payload[256];
     size_t len = 0;
@@ -177,21 +234,7 @@ static void ros2_msgs_send_telemetry(ros2_msgs_t *msgs, uint8_t seq)
     ros2_msgs_send_frame(msgs, ROS2_MSG_TELEMETRY, seq, payload, len);
 }
 
-void ros2_telemetry_task(void *arg)
-{
-    (void)arg;
-    ros2_msgs_t msgs = {};
-    uint8_t seq = 0;
-
-    while (1)
-    {
-        ESP_LOGI(TAG, "Sending telemetry seq=%u", seq);
-        ros2_msgs_send_telemetry(&msgs, seq++);
-        vTaskDelay(pdMS_TO_TICKS(1000));
-    }
-}
-
-static void ros2_msgs_handle_message(ros2_msgs_t *msgs, uint8_t msg_type, uint8_t seq, const uint8_t *payload, size_t len)
+static void ros2_msgs_handle_message(ros2_msgs_ctx_t *msgs, uint8_t msg_type, uint8_t seq, const uint8_t *payload, size_t len)
 {
     switch (msg_type)
     {
@@ -245,7 +288,15 @@ static void ros2_msgs_handle_message(ros2_msgs_t *msgs, uint8_t msg_type, uint8_
             switch (key)
             {
             case ROS2_CFG_TELEM_ENABLE:
-                int telemetry_enabled = (value != 0);
+                telemetry_enabled = (value != 0);
+                if (telemetry_timer == NULL)
+                    break;
+
+                if (telemetry_enabled)
+                    xTimerStart(telemetry_timer, 0);
+                else
+                    xTimerStop(telemetry_timer, 0);
+
                 ESP_LOGI(TAG, "Telemetry %s", telemetry_enabled ? "enabled" : "disabled");
                 break;
 
@@ -289,14 +340,26 @@ static void ros2_msgs_handle_message(ros2_msgs_t *msgs, uint8_t msg_type, uint8_
     }
 }
 
-void ros2_msgs_init(ros2_msgs_t *msgs, ros2_msgs_write_fn_t write_fn, void *write_ctx)
+void ros2_msgs_init(ros2_msgs_ctx_t *msgs)
 {
-    memset(msgs, 0, sizeof(*msgs));
-    msgs->write_fn = write_fn;
-    msgs->write_ctx = write_ctx;
+    // memset(msgs, 0, sizeof(*msgs));
+    ESP_LOGI(TAG, "ros2 msgs service init");
+
+    telemetry_timer = xTimerCreate(
+        "telemetry_tmr",
+        pdMS_TO_TICKS(1000),
+        pdTRUE, /* auto reload */
+        NULL,
+        telemetry_timer_cb);
+
+    xTaskCreate(ros2_command_task, "ros2_command", 4096, msgs, 5, &command_task);
+    xTaskCreate(ros2_telemetry_task, "ros2_telemetry", 4096, msgs, 5, &telemetry_task);
+
+    if (telemetry_enabled)
+        xTimerStart(telemetry_timer, 0);
 }
 
-void ros2_msgs_on_rx(ros2_msgs_t *msgs, const uint8_t *data, size_t len)
+static void ros2_msgs_process(ros2_msgs_ctx_t *msgs, uint8_t *data, size_t len)
 {
     if (len == 0)
     {
@@ -332,6 +395,8 @@ void ros2_msgs_on_rx(ros2_msgs_t *msgs, const uint8_t *data, size_t len)
         const uint8_t seq = msgs->parse_buf[offset + 2];
         const uint16_t length = msgs->parse_buf[offset + 3] | (msgs->parse_buf[offset + 4] << 8);
         const size_t frame_len = length + 7;
+
+        msgs->rx_seq = seq;
 
         if (length > 512)
         {

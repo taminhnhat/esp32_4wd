@@ -8,51 +8,22 @@
 #include "tinyusb.h"
 #include "tinyusb_cdc_acm.h"
 #include "tinyusb_default_config.h"
+#include "esp_log.h"
 
 static const char *TAG = "usb_bridge";
-static uint8_t rx_buf[CONFIG_TINYUSB_CDC_RX_BUFSIZE];
-static ros2_msgs_t ros2_msgs;
+static uint8_t rx_buf[CONFIG_TINYUSB_CDC_RX_BUFSIZE]; // todo: ring buffer
+// static ros2_msgs_ctx_t ros2_msgs;
+// static TaskHandle_t bridge_task = NULL;
+// static TaskHandle_t tele_task = NULL;
 
-static void usb_bridge_write_bytes(const uint8_t *data, size_t len, void *ctx)
+size_t usb_bridge_write(const char *data, size_t len)
+{
+    return usb_bridge_write_bytes(NULL, (uint8_t *)data, len);
+}
+
+size_t usb_bridge_write_bytes(void *ctx, uint8_t *data, size_t len)
 {
     (void)ctx;
-    usb_bridge_write((const char *)data, len);
-}
-
-void usb_bridge_init(void)
-{
-    ESP_LOGI(TAG, "USB initialization");
-    const tinyusb_config_t tusb_cfg = TINYUSB_DEFAULT_CONFIG();
-    ESP_ERROR_CHECK(tinyusb_driver_install(&tusb_cfg));
-
-    tinyusb_config_cdcacm_t acm_cfg = {
-        .cdc_port = TINYUSB_CDC_ACM_0,
-        .callback_rx = NULL,
-        .callback_rx_wanted_char = NULL,
-        .callback_line_state_changed = NULL,
-        .callback_line_coding_changed = NULL,
-    };
-
-    ESP_ERROR_CHECK(tinyusb_cdcacm_init(&acm_cfg));
-    ros2_msgs_init(&ros2_msgs, usb_bridge_write_bytes, NULL);
-    ESP_LOGI(TAG, "USB initialization DONE");
-}
-
-void usb_bridge_task(void *pvParameters)
-{
-    (void)pvParameters;
-
-    while (1)
-    {
-        size_t rx_size = 0;
-        ESP_ERROR_CHECK(tinyusb_cdcacm_read(TINYUSB_CDC_ACM_0, rx_buf, sizeof(rx_buf), &rx_size));
-        ros2_msgs_on_rx(&ros2_msgs, rx_buf, rx_size);
-        vTaskDelay(1);
-    }
-}
-
-void usb_bridge_write(const char *data, size_t len)
-{
     size_t offset = 0;
 
     while (offset < len)
@@ -71,4 +42,79 @@ void usb_bridge_write(const char *data, size_t len)
             ESP_ERROR_CHECK(err);
         }
     }
+
+    return offset;
 }
+
+size_t usb_bridge_read_bytes(void *ctx, uint8_t *data, size_t len)
+{
+    (void)ctx;
+    size_t rx_size = 0;
+    esp_err_t err = tinyusb_cdcacm_read(TINYUSB_CDC_ACM_0, data, len, &rx_size);
+
+    return err ? 0 : rx_size;
+}
+
+void usb_bridge_set_callback(void *ctx, usb_bridge_cb_t cb)
+{
+    //
+}
+
+static void usb_rx_cb(int itf, cdcacm_event_t *event)
+{
+    if (event->type == CDC_EVENT_RX)
+    {
+        ESP_LOGI(TAG, "rx cb");
+    }
+}
+
+void usb_bridge_init(void *ctx)
+{
+    ESP_LOGI(TAG, "USB initialization");
+    const tinyusb_config_t tusb_cfg = TINYUSB_DEFAULT_CONFIG();
+    ESP_ERROR_CHECK(tinyusb_driver_install(&tusb_cfg));
+
+    tinyusb_config_cdcacm_t acm_cfg = {
+        .cdc_port = TINYUSB_CDC_ACM_0,
+        .callback_rx = usb_rx_cb,
+        .callback_rx_wanted_char = NULL,
+        .callback_line_state_changed = NULL,
+        .callback_line_coding_changed = NULL,
+    };
+
+    ESP_ERROR_CHECK(tinyusb_cdcacm_init(&acm_cfg));
+    // ros2_msgs.write = usb_bridge_write_bytes;
+    // ros2_msgs.read = usb_bridge_read_bytes;
+    // ros2_msgs_init(&ros2_msgs, NULL);
+    ESP_LOGI(TAG, "USB initialization DONE");
+
+    // xTaskCreate(usb_bridge_task, "usb_bridge", 4096, &ros2_msgs, 5, &bridge_task);
+    // xTaskCreate(ros2_telemetry_task, "ros2_telemetry", 4096, &ros2_msgs, 5, &tele_task);
+}
+
+// void usb_bridge_task(void *pvParameters)
+// {
+//     (void)pvParameters;
+
+//     while (1)
+//     {
+//         size_t rx_size = 0;
+//         ESP_ERROR_CHECK(tinyusb_cdcacm_read(TINYUSB_CDC_ACM_0, rx_buf, sizeof(rx_buf), &rx_size));
+//         ros2_msgs_on_rx(&ros2_msgs, rx_buf, rx_size);
+//         vTaskDelay(1);
+//     }
+// }
+
+// void ros2_telemetry_task(void *pvParameters)
+// {
+//     (void)pvParameters;
+//     ros2_msgs.tx_seq = 0;
+
+//     while (1)
+//     {
+//         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+//         ros2_msgs_send_telemetry(&ros2_msgs, ros2_msgs.tx_seq++);
+//         ESP_LOGI(TAG, "Sending telemetry %u", ros2_msgs.tx_seq);
+//     }
+// }

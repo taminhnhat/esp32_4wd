@@ -26,7 +26,7 @@
 #define UART_BRIDGE_RX_BUFFER_SIZE 1024
 
 static const char *TAG = "uart_bridge";
-static ros2_msgs_t ros2_msgs;
+static ros2_msgs_ctx_t ros2_msgs;
 
 static void uart_bridge_write_bytes(const uint8_t *data, size_t len, void *ctx)
 {

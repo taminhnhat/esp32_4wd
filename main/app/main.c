@@ -15,11 +15,12 @@
 #include "battery.h"
 #include "board_led.h"
 #include "rp3_receiver.h"
-#include "uart_bridge.h"
+// #include "uart_bridge.h"
 #include "usb_bridge.h"
 #include "ros2_msgs.h"
 
 static const char *TAG = "example";
+static ros2_msgs_ctx_t ros2_ctx;
 
 // Enable this config,  we will print debug formated string, which in return can be captured and parsed by Serial-Studio
 #define SERIAL_STUDIO_DEBUG CONFIG_SERIAL_STUDIO_DEBUG
@@ -73,64 +74,68 @@ void app_main(void)
     xTaskCreate(uart_bridge_task, "uart_bridge", 4096, NULL, 5, NULL);
 #else
     // Initialize ROS2 message bridge over USB CDC
-    usb_bridge_init();
-    xTaskCreate(usb_bridge_task, "usb_bridge", 4096, NULL, 5, NULL);
-    xTaskCreate(ros2_telemetry_task, "ros2_telemetry", 4096, NULL, 5, NULL);
+    usb_bridge_init(&ros2_ctx);
+    // xTaskCreate(usb_bridge_task, "usb_bridge", 4096, NULL, 5, NULL);
+    // xTaskCreate(ros2_telemetry_task, "ros2_telemetry", 4096, NULL, 5, NULL);
 #endif
 
-    while (1)
-    {
-        vTaskDelay(pdMS_TO_TICKS(100));
+    ros2_ctx.write = usb_bridge_write_bytes;
+    ros2_ctx.read = usb_bridge_read_bytes;
+    ros2_msgs_init(&ros2_ctx);
 
-        // Get current battery data
-        battery_data_t battery_data = {0};
-        battery_read_data(&battery_data);
+    // while (1)
+    // {
+    //         vTaskDelay(pdMS_TO_TICKS(100));
 
-#if SERIAL_STUDIO_DEBUG
-        printf("/*motor1:%d,motor2:%d,motor3:%d,motor4:%d,voltage:%.2f,current:%.3f,power:%.2f*/\r\n",
-               motor_system.motors[0].report_pulses,
-               motor_system.motors[1].report_pulses,
-               motor_system.motors[2].report_pulses,
-               motor_system.motors[3].report_pulses,
-               battery_data.voltage,
-               battery_data.current,
-               battery_data.power);
-#endif
+    //         // Get current battery data
+    //         battery_data_t battery_data = {0};
+    //         battery_read_data(&battery_data);
 
-        // --- RP3 Receiver logging every 100ms: print 10 RC channel values mapped to -100..100 ---
-        rp3_receiver_snapshot_t rp3_snapshot;
-        rp3_receiver_get_snapshot(&rp3_receiver, &rp3_snapshot);
-        if (rp3_snapshot.link_stats_valid && rp3_snapshot.rc_channels_valid)
-        {
-            char line[160];
-            int pos = 0;
+    // #if SERIAL_STUDIO_DEBUG
+    //         printf("/*motor1:%d,motor2:%d,motor3:%d,motor4:%d,voltage:%.2f,current:%.3f,power:%.2f*/\r\n",
+    //                motor_system.motors[0].report_pulses,
+    //                motor_system.motors[1].report_pulses,
+    //                motor_system.motors[2].report_pulses,
+    //                motor_system.motors[3].report_pulses,
+    //                battery_data.voltage,
+    //                battery_data.current,
+    //                battery_data.power);
+    // #endif
 
-            for (int i = 0; i < 10; ++i)
-            {
-                // printf("%-8u", rp3_snapshot.rc_channels[i]);
-                pos += snprintf(line + pos, sizeof(line) - pos,
-                                "%-8u", rp3_snapshot.rc_channels[i]);
-            }
-            // printf("\n");
-            pos += snprintf(line + pos, sizeof(line) - pos, "\r\n");
-#if defined(CONFIG_ROS2_TRANSPORT_UART) && CONFIG_ROS2_TRANSPORT_UART
-            uart_bridge_write(line, pos);
-#else
-            usb_bridge_write(line, pos);
-#endif
-        }
+    //         // --- RP3 Receiver logging every 100ms: print 10 RC channel values mapped to -100..100 ---
+    //         rp3_receiver_snapshot_t rp3_snapshot;
+    //         rp3_receiver_get_snapshot(&rp3_receiver, &rp3_snapshot);
+    //         if (rp3_snapshot.link_stats_valid && rp3_snapshot.rc_channels_valid)
+    //         {
+    //             char line[160];
+    //             int pos = 0;
 
-        // Print battery status every 5 seconds
-        static uint32_t battery_print_counter = 0;
-        if (++battery_print_counter % 10 == 0)
-        {
-            // ESP_LOGI(TAG, "Velocity [pulses/%dms] m1=%d m2=%d m3=%d m4=%d",
-            //          BDC_PID_LOOP_PERIOD_MS,
-            //          motor_system.motors[0].report_pulses,
-            //          motor_system.motors[1].report_pulses,
-            //          motor_system.motors[2].report_pulses,
-            //          motor_system.motors[3].report_pulses);
-            // battery_print_status();
-        }
-    }
+    //             for (int i = 0; i < 10; ++i)
+    //             {
+    //                 // printf("%-8u", rp3_snapshot.rc_channels[i]);
+    //                 pos += snprintf(line + pos, sizeof(line) - pos,
+    //                                 "%-8u", rp3_snapshot.rc_channels[i]);
+    //             }
+    //             // printf("\n");
+    //             pos += snprintf(line + pos, sizeof(line) - pos, "\r\n");
+    // #if defined(CONFIG_ROS2_TRANSPORT_UART) && CONFIG_ROS2_TRANSPORT_UART
+    //             uart_bridge_write(line, pos);
+    // #else
+    //             usb_bridge_write(line, pos);
+    // #endif
+    //         }
+
+    //         // Print battery status every 5 seconds
+    //         static uint32_t battery_print_counter = 0;
+    //         if (++battery_print_counter % 10 == 0)
+    //         {
+    //             // ESP_LOGI(TAG, "Velocity [pulses/%dms] m1=%d m2=%d m3=%d m4=%d",
+    //             //          BDC_PID_LOOP_PERIOD_MS,
+    //             //          motor_system.motors[0].report_pulses,
+    //             //          motor_system.motors[1].report_pulses,
+    //             //          motor_system.motors[2].report_pulses,
+    //             //          motor_system.motors[3].report_pulses);
+    //             // battery_print_status();
+    //         }
+    // }
 }
